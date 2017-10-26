@@ -1,12 +1,10 @@
 package tech.dronescan;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,27 +16,25 @@ public class TagReadHandler implements ReadListener {
 
 	private static final Logger log = LoggerFactory.getLogger(TagReadHandler.class);
 
+	private static final String DATA_DIR = "data";
+
 	private BlockingQueue<TagReadData> queue = new LinkedBlockingQueue<>();
-	
+
+	public TagReadHandler() throws IOException {
+
+		// start new thread to handle printing tags to file
+		TagPrinter printer = new TagPrinter(queue, Paths.get(DATA_DIR));
+		new Thread(printer).start();
+	}
 
 	@Override
 	public void tagRead(Reader r, TagReadData t) {
 
 		try {
 			queue.put(t);
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			log.error("Error added tag data to queue", e);
 		}
-		
-//		if (t != null) {
-//			DateTime dateTime = new DateTime(t.getTime());
-//
-//			String s = String.format("EPC:%s ant:%d count:%d time:%s", (t == null) ? "none" : t.epcString(),
-//					t.getAntenna(), t.getReadCount(), formatter.print(dateTime));
-//			System.out.println(s);
-//		}
 	}
-	
 
 }

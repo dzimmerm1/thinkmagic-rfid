@@ -1,5 +1,7 @@
 package tech.dronescan;
 
+import java.io.IOException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,9 +41,10 @@ public class MercuryScanner {
 		} finally {
 			shutdown();
 		}		
+		System.exit(0);
 	}
 	
-	private void startReading() throws ReaderException {
+	private void startReading() throws ReaderException, IOException {
 		log.info("Starting reader");
 		
         SimpleReadPlan plan = new SimpleReadPlan(antennaList, TagProtocol.GEN2, null, null, 1000);
@@ -62,7 +65,7 @@ public class MercuryScanner {
 		
 	}
 
-	private void readData() throws ReaderException {
+	private void readData() throws ReaderException, IOException {
         TagReadData[] tags = reader.read(READ_TIME_MS);
         TagReadHandler handler = new TagReadHandler();
         for (TagReadData tag : tags)
@@ -71,7 +74,7 @@ public class MercuryScanner {
 	}
 
 	private void connect(String ip) throws ReaderException {
-		reader = Reader.create("tmr:///com3"); //+ ip);
+		reader = Reader.create("tmr://" + ip);
 		reader.connect();
 		log.info("Reader Connected to {}", ip);
 	}

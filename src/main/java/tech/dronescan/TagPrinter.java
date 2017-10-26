@@ -29,7 +29,7 @@ public class TagPrinter implements Runnable {
 		this.queue = queue;
 		this.dataDir = dataDir;
 
-		if (Files.exists(dataDir)) {
+		if (!Files.exists(dataDir)) {
 			Files.createDirectory(dataDir);
 			log.info("Created data directory " + dataDir);
 		}
@@ -37,8 +37,23 @@ public class TagPrinter implements Runnable {
 		if (!Files.isDirectory(dataDir))
 			throw new RuntimeException("The directory " + dataDir + " does not exist");
 
-		transferDir = Files.createDirectory(dataDir.resolve("transfer"));
-		log.info("Created transfer directory " + transferDir);
+		transferDir = dataDir.resolve("transfer");
+		if (!Files.isDirectory(transferDir)) {
+			Files.createDirectory(transferDir);
+			log.info("Created transfer directory " + transferDir);
+		}
+
+		// add shutdown hook
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			public void run() {
+				log.info("Shutting down TagPrinter");
+				if (writer != null)
+					try {
+						writer.close();
+					} catch (Exception e) {
+					}
+			}
+		});
 
 	}
 
@@ -46,14 +61,15 @@ public class TagPrinter implements Runnable {
 	 * Retrieves an TagReadData from the head of the queue and prints to a file
 	 */
 	public void run() {
+		TagReadData tag = null;
 		try {
 			while (true) {
-				TagReadData tag = queue.take();
+				tag = queue.take();
 				writeTag(tag);
 			}
 
 		} catch (Throwable e) {
-			throw new RuntimeException(e);
+			log.error("Error writing tag " + tag, e);
 		}
 	}
 
@@ -72,14 +88,14 @@ public class TagPrinter implements Runnable {
 		sb.append("\n");
 
 		writer.write(sb.toString());
-		
-		//TODO: check if file is ready for transfer
+
+		// TODO: check if file is ready for transfer
 	}
 
 	private FileWriter createNewFile() throws IOException {
 		Path dataFile = dataDir.resolve("tags.csv");
-		FileWriter writer = new FileWriter(dataFile.toFile());
-		writer.write(COLUMN_HEADERS);
+		FileWriter writer = new FileWriter(dataFile.toFile(), true);
+		writer.write(COLUMN_HEADERS + "\n");
 		return writer;
 	}
 }
