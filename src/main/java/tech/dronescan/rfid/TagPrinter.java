@@ -1,9 +1,10 @@
-package tech.dronescan;
+package tech.dronescan.rfid;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.concurrent.BlockingQueue;
 
 import org.joda.time.DateTime;
@@ -14,16 +15,26 @@ import org.slf4j.LoggerFactory;
 
 import com.thingmagic.TagReadData;
 
+/**
+ * Reads tags from the queue and prints them to file
+ *
+ */
 public class TagPrinter implements Runnable {
 
 	private static final Logger log = LoggerFactory.getLogger(TagPrinter.class);
 	private static final String COLUMN_HEADERS = "epc,time,rssi,phase,antenna";
-
+	
 	private BlockingQueue<TagReadData> queue;
 	private Path dataDir;
 	private Path transferDir;
+	private Path dataFile;
 	private FileWriter writer = null;
 	private DateTimeFormatter formatter = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS");
+	private int numRead = 0;
+	private long lastTransferTime = System.currentTimeMillis();
+	private boolean isRunning = true;
+	private Configuration config = Configuration.getInstance();
+
 
 	public TagPrinter(BlockingQueue<TagReadData> queue, Path dataDir) throws IOException {
 		this.queue = queue;
@@ -43,18 +54,6 @@ public class TagPrinter implements Runnable {
 			log.info("Created transfer directory " + transferDir);
 		}
 
-		// add shutdown hook
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			public void run() {
-				log.info("Shutting down TagPrinter");
-				if (writer != null)
-					try {
-						writer.close();
-					} catch (Exception e) {
-					}
-			}
-		});
-
 	}
 
 	/**
@@ -63,7 +62,7 @@ public class TagPrinter implements Runnable {
 	public void run() {
 		TagReadData tag = null;
 		try {
-			while (true) {
+			while (isRunning) {
 				tag = queue.take();
 				writeTag(tag);
 			}
@@ -71,6 +70,16 @@ public class TagPrinter implements Runnable {
 		} catch (Throwable e) {
 			log.error("Error writing tag " + tag, e);
 		}
+	}
+	
+	public void shutdown() {
+		log.info("Shutting down TagPrinter");
+		isRunning = false;
+		if (writer != null)
+			try {
+				writer.close();
+			} catch (Exception e) {
+			}
 	}
 
 	private void writeTag(TagReadData tag) throws IOException {
@@ -88,14 +97,33 @@ public class TagPrinter implements Runnable {
 		sb.append("\n");
 
 		writer.write(sb.toString());
+		numRead++;
+		
+		if (numRead % config.maxTagsPerFile == 0)
+			log.info("Read {} tags", numRead);
 
-		// TODO: check if file is ready for transfer
+		//transfer file if max tags per file is exceeded or if the max time per file is exceeded
+		if (numRead > config.maxTagsPerFile || System.currentTimeMillis() - lastTransferTime > config.maxTimePerFile) {
+			writer.close();
+			//TODO: zip file when moving to transfer directory
+			Files.move(dataFile, transferDir.resolve(dataDir.getFileName() + "-" + System.currentTimeMillis()), StandardCopyOption.REPLACE_EXISTING);
+			writer = createNewFile();
+			numRead = 0;
+			lastTransferTime = System.currentTimeMillis();
+		}
 	}
 
 	private FileWriter createNewFile() throws IOException {
-		Path dataFile = dataDir.resolve("tags.csv");
+		dataFile = dataDir.resolve("tags.csv");
+		boolean addHeaders = true;
+		if (Files.exists(dataFile))
+			addHeaders = false;
+		
 		FileWriter writer = new FileWriter(dataFile.toFile(), true);
-		writer.write(COLUMN_HEADERS + "\n");
+		
+		if (addHeaders)
+			writer.write(COLUMN_HEADERS + "\n");
+		
 		return writer;
 	}
 }

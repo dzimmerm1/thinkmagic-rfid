@@ -1,4 +1,4 @@
-package tech.dronescan;
+package tech.dronescan.rfid;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -19,11 +19,12 @@ public class TagReadHandler implements ReadListener {
 	private static final String DATA_DIR = "data";
 
 	private BlockingQueue<TagReadData> queue = new LinkedBlockingQueue<>();
+	private TagPrinter printer;
 
 	public TagReadHandler() throws IOException {
 
 		// start new thread to handle printing tags to file
-		TagPrinter printer = new TagPrinter(queue, Paths.get(DATA_DIR));
+		printer = new TagPrinter(queue, Paths.get(DATA_DIR));
 		new Thread(printer).start();
 	}
 
@@ -35,6 +36,10 @@ public class TagReadHandler implements ReadListener {
 		} catch (Exception e) {
 			log.error("Error added tag data to queue", e);
 		}
+	}
+	
+	public void shutdown() {
+		printer.shutdown();
 	}
 
 }
